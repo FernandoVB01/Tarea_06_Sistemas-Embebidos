@@ -1,82 +1,61 @@
 {
   "version": 1,
-  "author": "Tarea #6 - Sistemas Embebidos - ESPOL",
+  "author": "Fernando Vélez - Tarea #6 - Sistemas Embebidos - FIEC ESPOL",
   "editor": "wokwi",
   "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
     {
-      "type": "board-esp32-devkit-c-v4",
-      "id": "esp",
-      "top": 0,
-      "left": 0,
-      "attrs": {}
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": -13.2,
+      "left": 138.2,
+      "attrs": { "color": "red", "label": "PROCESO" }
     },
     {
       "type": "wokwi-led",
-      "id": "ledR",
-      "top": -80,
-      "left": 240,
-      "attrs": { "color": "red", "label": "DEEP SLEEP" }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledV",
-      "top": -80,
-      "left": 300,
-      "attrs": { "color": "green", "label": "ACTIVO" }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledA",
-      "top": -80,
-      "left": 360,
-      "attrs": { "color": "blue", "label": "LIGHT SLEEP" }
+      "id": "led2",
+      "top": -13.2,
+      "left": 210.2,
+      "attrs": { "color": "yellow", "label": "ESPERA" }
     },
     {
       "type": "wokwi-resistor",
-      "id": "rR",
-      "top": 10,
-      "left": 240,
+      "id": "r1",
+      "top": 81.6,
+      "left": 133.85,
+      "rotate": 90,
       "attrs": { "value": "220" }
     },
     {
       "type": "wokwi-resistor",
-      "id": "rV",
-      "top": 10,
-      "left": 300,
-      "attrs": { "value": "220" }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "rA",
-      "top": 10,
-      "left": 360,
+      "id": "r2",
+      "top": 81.6,
+      "left": 205.85,
+      "rotate": 90,
       "attrs": { "value": "220" }
     },
     {
       "type": "wokwi-pushbutton",
-      "id": "btn",
-      "top": 150,
-      "left": 240,
-      "attrs": { "color": "yellow", "label": "WAKE" }
+      "id": "btn1",
+      "top": 54.2,
+      "left": 249.6,
+      "attrs": { "color": "green", "label": "DESPERTAR" }
     }
   ],
   "connections": [
-    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
 
-    [ "esp:D25", "rR:1", "red",   [ "h0", "v40" ] ],
-    [ "rR:2",    "ledR:A", "red", [ "v-40" ] ],
-    [ "ledR:C",  "esp:GND.2", "black", [ "v40", "h-80" ] ],
+    [ "led1:A", "r1:1", "red", [ "v0" ] ],
+    [ "r1:2", "esp:2", "red", [ "h0", "v56.4" ] ],
+    [ "led1:C", "esp:GND.1", "black", [ "v0" ] ],
 
-    [ "esp:D26", "rV:1", "green",   [ "h0", "v40" ] ],
-    [ "rV:2",    "ledV:A", "green", [ "v-40" ] ],
-    [ "ledV:C",  "esp:GND.2", "black", [ "v40", "h-140" ] ],
+    [ "led2:A", "r2:1", "gold", [ "v0" ] ],
+    [ "r2:2", "esp:4", "gold", [ "h0", "v56.4" ] ],
+    [ "led2:C", "esp:GND.1", "black", [ "v0" ] ],
 
-    [ "esp:D27", "rA:1", "blue",   [ "h0", "v40" ] ],
-    [ "rA:2",    "ledA:A", "blue", [ "v-40" ] ],
-    [ "ledA:C",  "esp:GND.2", "black", [ "v40", "h-200" ] ],
-
-    [ "esp:D33", "btn:1.l", "gold",  [ "h0", "v20" ] ],
-    [ "btn:2.l", "esp:GND.2", "black", [ "v20", "h-60" ] ]
-  ]
+    [ "btn1:1.l", "esp:5", "green", [ "h-86.4", "v0.2" ] ],
+    [ "btn1:2.r", "esp:GND.1", "black", [ "h0", "v-57.8", "h-172.8" ] ]
+  ],
+  "dependencies": {}
 }

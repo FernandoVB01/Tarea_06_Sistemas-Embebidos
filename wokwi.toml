@@ -1,4 +1,12 @@
 [wokwi]
 version = 1
-firmware = '.pio/build/esp32dev/firmware.bin'
+
+# merged.bin = bootloader (0x1000) + particiones (0x8000) + app (0x10000)
+# fusionados en una sola imagen que empieza en 0x0. Lo genera
+# merge_firmware.py despues de cada `pio run`.
+#
+# NO apuntar aqui a firmware.bin: es solo la aplicacion, sin bootloader.
+# El simulador arranca, el cronometro corre, pero el chip nunca llega a
+# app_main() y no sale nada por el serial.
+firmware = '.pio/build/esp32dev/merged.bin'
 elf      = '.pio/build/esp32dev/firmware.elf'

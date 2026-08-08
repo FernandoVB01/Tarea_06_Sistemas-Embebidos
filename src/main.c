@@ -1,160 +1,212 @@
 /**
  * =====================================================================
  *  TAREA #6 - SISTEMAS EMBEBIDOS (FIEC - ESPOL)
- *  Ejercicio 1: Gestion de Energia en el ESP32
+ *  Gestion de Energia en el ESP32
+ *
+ *  Autor: Fernando Velez
  * =====================================================================
  *
  *  CICLO DE OPERACION
  *  ------------------
  *
- *      [ARRANQUE]  se reporta la causa del despertar
+ *      [PROCESO ACTIVO]  10 s - LED ROJO parpadeando
+ *           |            la CPU trabaja a plena velocidad
+ *           v
+ *      [REPOSO]  15 s o boton - LED AMARILLO marca la entrada
+ *           |    el chip entra en LIGHT SLEEP: la CPU se pausa
+ *           v
+ *      [CAUSA DE REACTIVACION]  BOTON o TEMPORIZADOR
  *           |
  *           v
- *      [FASE ACTIVA LARGA]  8 s - LED VERDE
- *           |               trabajo simulado + telemetria por serial
- *           v
- *      [LIGHT SLEEP]  5 s o boton - LED APAGADO
- *           |         la CPU se pausa; al volver, la RAM esta intacta
- *           v
- *      [FASE ACTIVA CORTA]  4 s - LED VERDE
- *           |               se demuestra que la RAM sobrevivio
- *           v
- *      [DEEP SLEEP]  10 s o boton - LED APAGADO
- *           |        el chip REINICIA; solo sobrevive RTC_DATA_ATTR
- *           v
- *      (vuelve al ARRANQUE, con el contador de ciclos incrementado)
+ *      (vuelve al PROCESO ACTIVO, con el contador incrementado)
  *
- *      Tras CICLOS_ANTES_HIBERNAR ciclos completos, el sistema entra en
- *      HIBERNACION para demostrar que ni la memoria RTC sobrevive.
  *
- *  QUE DEMUESTRA CADA MODO
- *  -----------------------
- *    Light sleep : la variable de RAM `s_contador_ram` conserva su valor.
- *    Deep sleep  : `s_contador_ram` vuelve a cero, pero el contador en
- *                  RTC_DATA_ATTR sigue creciendo.
- *    Hibernacion : incluso el contador RTC_DATA_ATTR vuelve a cero.
+ *  POR QUE LIGHT SLEEP Y NO UN BUCLE DE ESPERA
+ *  -------------------------------------------
+ *  Una espera hecha con vTaskDelay() mantiene la CPU encendida: el LED
+ *  se apaga y el mensaje dice "reposo", pero el consumo NO baja y un
+ *  multimetro no mide ninguna diferencia. Como el objetivo de la tarea
+ *  es demostrar ahorro de energia medible, la fase de reposo usa
+ *  esp_light_sleep_start(), que pausa la CPU de verdad (~0.8 mA frente
+ *  a ~40 mA en activo, Tabla 4-2 del datasheet ESP32 v5.2).
+ *
+ *  Al despertar de light sleep la ejecucion CONTINUA en la linea
+ *  siguiente y toda la RAM conserva su contenido, por eso el contador
+ *  de ciclos es una variable normal y no necesita RTC_DATA_ATTR.
  * =====================================================================
  */
 #include <stdio.h>
-#include <inttypes.h>
+#include <stdbool.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "esp_system.h"
-#include "esp_attr.h"     /* RTC_DATA_ATTR */
+#include "driver/gpio.h"
+#include "driver/uart.h"
+#include "esp_sleep.h"
 
-#include "config.h"
-#include "indicador.h"
-#include "energia.h"
+/* ===== DEFINICION DE PINES ===== */
+#define LED_PROCESO     2   /* LED ROJO     - indica proceso activo */
+#define LED_ESPERA      4   /* LED AMARILLO - indica modo reposo    */
+#define BOTON_DESPERTAR 5   /* Activo en LOW (pull-up interno)      */
 
-static const char *TAG = "main";
+/* ===== CONFIGURACION DE TIEMPOS ===== */
+#define DURACION_PROCESO_MS  10000   /* 10 segundos de trabajo          */
+#define DURACION_REPOSO_SEG  15      /* 15 segundos en reposo (maximo)  */
 
-/* ------------------------------------------------------------------ */
-/*  Variables de estado                                               */
-/* ------------------------------------------------------------------ */
-
-/* RTC_DATA_ATTR -> se guarda en la memoria RTC lenta, que permanece
- * alimentada durante el deep sleep. Sobrevive al deep sleep pero NO a
- * la hibernacion ni a un reset por boton EN.                          */
-static RTC_DATA_ATTR uint32_t s_ciclos          = 0;
-static RTC_DATA_ATTR uint32_t s_despertar_timer = 0;
-static RTC_DATA_ATTR uint32_t s_despertar_boton = 0;
-
-/* Variable normal en RAM: se pierde en cada deep sleep. Sirve para
- * evidenciar la diferencia frente al light sleep.                     */
-static uint32_t s_contador_ram = 0;
+/* ===== VARIABLES GLOBALES ===== */
+static int contadorCiclos = 0;
 
 /* ------------------------------------------------------------------ */
-/*  Utilidades                                                        */
+/*  Inicializacion                                                    */
 /* ------------------------------------------------------------------ */
 
-static void imprimir_separador(const char *titulo)
+static void inicializarPines(void)
 {
-    printf("\n");
-    printf("========================================================\n");
-    printf("  %s\n", titulo);
-    printf("========================================================\n");
+    const gpio_config_t leds = {
+        .pin_bit_mask = (1ULL << LED_PROCESO) | (1ULL << LED_ESPERA),
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&leds));
+
+    /* El boton cierra contra GND, por eso el pull-up interno: en reposo
+     * el pin lee 1, y al pulsarlo lee 0.                              */
+    const gpio_config_t boton = {
+        .pin_bit_mask = (1ULL << BOTON_DESPERTAR),
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&boton));
+
+    gpio_set_level(LED_PROCESO, 0);
+    gpio_set_level(LED_ESPERA, 0);
 }
 
-/**
- * @brief Reporta por que se esta ejecutando app_main() y actualiza
- *        las estadisticas acumuladas en memoria RTC.
- */
-static void reportar_arranque(void)
+static bool botonPresionado(void)
 {
-    causa_despertar_t causa = energia_causa_despertar();
-
-    imprimir_separador("TAREA #6 - GESTION DE ENERGIA EN EL ESP32");
-
-    printf("  Causa del arranque : %s\n", energia_causa_texto(causa));
-    printf("  Ciclos completados : %" PRIu32 "\n", s_ciclos);
-
-    switch (causa) {
-        case DESPERTAR_TIMER:
-            s_despertar_timer++;
-            printf("  -> El temporizador RTC agoto su cuenta.\n");
-            break;
-        case DESPERTAR_BOTON:
-            s_despertar_boton++;
-            printf("  -> El boton externo (ext0) forzo el despertar.\n");
-            break;
-        case DESPERTAR_ENCENDIDO:
-            printf("  -> Arranque en frio: los contadores RTC estan en cero.\n");
-            break;
-        default:
-            printf("  -> Fuente de despertar no contemplada.\n");
-            break;
-    }
-
-    printf("  Despertares por timer : %" PRIu32 "\n", s_despertar_timer);
-    printf("  Despertares por boton : %" PRIu32 "\n", s_despertar_boton);
-    printf("  Contador en RAM       : %" PRIu32 "  <- deberia ser 0 tras deep sleep\n",
-           s_contador_ram);
-    printf("--------------------------------------------------------\n");
+    return gpio_get_level(BOTON_DESPERTAR) == 0;   /* activo en bajo */
 }
 
+/* ------------------------------------------------------------------ */
+/*  Fase 1: proceso activo                                            */
+/* ------------------------------------------------------------------ */
+
 /**
- * @brief Fase de trabajo activo.
+ * Simula la carga util del sistema durante DURACION_PROCESO_MS.
+ * Es el estado de mayor consumo: CPU a plena velocidad y LED encendido.
  *
- * Simula la carga util del sistema: incrementa contadores y publica
- * telemetria por el puerto serial una vez por segundo. Es el estado de
- * mayor consumo (LED encendido + CPU a plena velocidad).
- *
- * @param duracion_ms Duracion de la fase.
- * @param etiqueta    Nombre de la fase para el log.
- * @return true si el boton fue presionado durante la fase.
+ * @return true si el boton se pulso en algun momento de la fase.
  */
-static bool fase_activa(int duracion_ms, const char *etiqueta)
+static bool ejecutarProceso(void)
 {
-    ESP_LOGI(TAG, "### FASE ACTIVA (%s) durante %d ms ###",
-             etiqueta, duracion_ms);
-    indicador_set(IND_ACTIVO);
+    printf("Sistema trabajando - realizando operaciones...\n");
 
-    bool boton = false;
-    int  transcurrido = 0;
+    bool estadoLED       = false;
+    bool botonDetectado  = false;
+    int  transcurrido    = 0;
 
-    while (transcurrido < duracion_ms) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-        transcurrido += 100;
+    while (transcurrido < DURACION_PROCESO_MS) {
+        estadoLED = !estadoLED;
+        gpio_set_level(LED_PROCESO, estadoLED ? 1 : 0);
 
-        if (energia_boton_presionado()) {
-            boton = true;
+        if (botonPresionado()) {
+            botonDetectado = true;
+            printf("  >>> BOTON detectado durante el proceso activo\n");
         }
 
-        /* Telemetria una vez por segundo. */
-        if (transcurrido % 1000 == 0) {
-            s_contador_ram++;
-            printf("  [t=%2d s] trabajando... contador_ram=%" PRIu32
-                   "  heap=%" PRIu32 " B\n",
-                   transcurrido / 1000,
-                   s_contador_ram,
-                   esp_get_free_heap_size());
-        }
+        printf(" Realizando actividad\n");
+        vTaskDelay(pdMS_TO_TICKS(500));
+        transcurrido += 500;
     }
 
-    return boton;
+    gpio_set_level(LED_PROCESO, 0);
+    return botonDetectado;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fase 2: reposo (light sleep)                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Entra en LIGHT SLEEP hasta que venza el temporizador o se pulse el
+ * boton, lo que ocurra primero.
+ *
+ * Dos fuentes de despertar:
+ *   - Temporizador RTC : despertar periodico y predecible.
+ *   - GPIO             : despertar por evento asincrono, sin gastar
+ *                        energia sondeando el pin.
+ *
+ * Se usa despertar por GPIO y no ext0 porque ext0 exige un pin con
+ * funcion RTC, y GPIO5 no la tiene. En light sleep el dominio digital
+ * sigue alimentado, asi que gpio_wakeup_enable() vale para cualquier pin.
+ *
+ * @return true si desperto por el boton, false si vencio el temporizador.
+ */
+static bool modoReposo(void)
+{
+    printf(" Cambiando a REPOSO ...\n");
+
+    /* Destello de aviso: se ve la transicion antes de dormir. */
+    gpio_set_level(LED_ESPERA, 1);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    /* El LED se apaga ANTES de dormir. Un LED encendido consume
+     * miliamperios y anularia por completo el ahorro que se busca
+     * demostrar: el light sleep esta en el orden de 0.8 mA.        */
+    gpio_set_level(LED_ESPERA, 0);
+
+    ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(
+        (uint64_t)DURACION_REPOSO_SEG * 1000000ULL));
+
+    ESP_ERROR_CHECK(gpio_wakeup_enable(BOTON_DESPERTAR, GPIO_INTR_LOW_LEVEL));
+    ESP_ERROR_CHECK(esp_sleep_enable_gpio_wakeup());
+
+    /* Vaciar la FIFO del UART antes de dormir. Si el chip se duerme con
+     * bytes pendientes, salen recortados y el monitor muestra basura. */
+    uart_wait_tx_idle_polling(UART_NUM_0);
+
+    /* La CPU se pausa aqui. Al despertar continua en la linea siguiente
+     * y la RAM esta intacta.                                          */
+    esp_light_sleep_start();
+
+    bool porBoton = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO);
+
+    /* Si el usuario mantiene el boton pulsado, el siguiente sueno se
+     * interrumpiria de inmediato. Se espera a que lo suelte.          */
+    if (porBoton) {
+        int espera = 0;
+        while (botonPresionado() && espera < 3000) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            espera += 20;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));   /* antirrebote */
+    }
+
+    printf(" Regresando del reposo\n");
+    return porBoton;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fase 3: reporte de la causa                                       */
+/* ------------------------------------------------------------------ */
+
+static void mostrarCausaDespertar(bool botonEnProceso, bool botonEnReposo)
+{
+    if (botonEnProceso || botonEnReposo) {
+        printf("[REACTIVACION] Origen: BOTON\n");
+        for (int i = 0; i < 3; i++) {
+            gpio_set_level(LED_ESPERA, 1);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            gpio_set_level(LED_ESPERA, 0);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    } else {
+        printf("[REACTIVACION] Origen: TEMPORIZADOR AUTOMATICO\n");
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -163,85 +215,22 @@ static bool fase_activa(int duracion_ms, const char *etiqueta)
 
 void app_main(void)
 {
-    /* 1) Recuperar el control de los pines tras un posible deep sleep. */
-    indicador_liberar_hold();
+    inicializarPines();
 
-    /* 2) Inicializacion de perifericos. */
-    indicador_init();
-    energia_init_boton();
+    printf("\n=== Sistema operativo iniciado ===\n");
+    printf("LED PROCESO = Trabajando\n");
+    printf("LED ESPERA = En reposo\n");
+    printf("Boton = Reactivar\n");
+    printf("==========================================\n\n");
 
-    /* 3) Informar por que estamos aqui. */
-    reportar_arranque();
+    while (1) {
+        contadorCiclos++;
+        printf("\n===========================================\n");
+        printf("Ciclo de trabajo numero: %d\n", contadorCiclos);
+        printf("===========================================\n");
 
-    /* Si se desperto con el boton aun presionado, esperar a que lo suelte
-     * para no encadenar despertares inmediatos.                          */
-    if (energia_boton_presionado()) {
-        ESP_LOGW(TAG, "boton aun presionado, esperando a que se suelte...");
-        energia_esperar_soltar_boton(3000);
+        bool botonEnProceso = ejecutarProceso();
+        bool botonEnReposo  = modoReposo();
+        mostrarCausaDespertar(botonEnProceso, botonEnReposo);
     }
-
-    /* 4) Senal visual de arranque. */
-    indicador_parpadeo(IND_ACTIVO, 2, 120);
-
-    /* ---------------------------------------------------------------- */
-    /*  FASE 1: trabajo activo prolongado                               */
-    /* ---------------------------------------------------------------- */
-    fase_activa(T_ACTIVO_LARGO_MS, "previa al light sleep");
-
-    /* ---------------------------------------------------------------- */
-    /*  FASE 2: LIGHT SLEEP                                             */
-    /* ---------------------------------------------------------------- */
-    imprimir_separador("TRANSICION A LIGHT SLEEP");
-    printf("  Valor de contador_ram ANTES de dormir : %" PRIu32 "\n",
-           s_contador_ram);
-    printf("  Consumo esperado en light sleep       : ~0.8 mA\n");
-    printf("  Presione el boton para despertar antes de tiempo.\n\n");
-
-    indicador_parpadeo(IND_LIGHT_SLEEP, 3, 150);
-
-    int64_t t_dormido = esp_timer_get_time();
-    energia_light_sleep(T_LIGHT_SLEEP_US);
-    t_dormido = esp_timer_get_time() - t_dormido;
-
-    imprimir_separador("DE VUELTA DEL LIGHT SLEEP");
-    printf("  Tiempo dormido real                   : %" PRId64 " ms\n",
-           t_dormido / 1000);
-    printf("  Valor de contador_ram DESPUES         : %" PRIu32 "\n",
-           s_contador_ram);
-    printf("  -> La RAM sobrevivio: la CPU solo se PAUSO.\n");
-
-    /* ---------------------------------------------------------------- */
-    /*  FASE 3: trabajo activo corto                                    */
-    /* ---------------------------------------------------------------- */
-    fase_activa(T_ACTIVO_CORTO_MS, "previa al deep sleep");
-
-    /* ---------------------------------------------------------------- */
-    /*  FASE 4: DEEP SLEEP o HIBERNACION                                */
-    /* ---------------------------------------------------------------- */
-    s_ciclos++;
-
-    if (s_ciclos >= CICLOS_ANTES_HIBERNAR) {
-        imprimir_separador("TRANSICION A HIBERNACION");
-        printf("  Se completaron %" PRIu32 " ciclos.\n", s_ciclos);
-        printf("  Consumo esperado en hibernacion       : ~5 uA\n");
-        printf("  Al despertar, los contadores RTC estaran en CERO,\n");
-        printf("  porque la memoria RTC tambien se apaga.\n\n");
-
-        indicador_parpadeo(IND_HIBERNACION, 4, 150);
-        energia_hibernar(T_DEEP_SLEEP_US);
-        /* no retorna */
-    }
-
-    imprimir_separador("TRANSICION A DEEP SLEEP");
-    printf("  Valor de contador_ram ANTES de dormir : %" PRIu32 "\n",
-           s_contador_ram);
-    printf("  Consumo esperado en deep sleep        : ~10 uA\n");
-    printf("  Al despertar, contador_ram sera 0 pero el contador\n");
-    printf("  de ciclos en memoria RTC seguira creciendo.\n");
-    printf("  Presione el boton para despertar antes de tiempo.\n\n");
-
-    indicador_parpadeo(IND_DEEP_SLEEP, 3, 150);
-    energia_deep_sleep(T_DEEP_SLEEP_US);
-
-    /* Inalcanzable: esp_deep_sleep_start() no retorna. */
 }

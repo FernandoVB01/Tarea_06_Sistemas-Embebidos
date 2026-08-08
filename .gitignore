@@ -6,3 +6,11 @@ build/
 *.bin
 *.elf
 *.map
+
+# Informe: se versiona el PDF, no la fuente LaTeX ni sus temporales
+docs/*.tex
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz

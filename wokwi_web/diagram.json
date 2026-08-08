@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "author": "Tarea #6 - Sistemas Embebidos - ESPOL",
+  "author": "Fernando Vélez - Tarea #6 - Sistemas Embebidos - FIEC ESPOL",
   "editor": "wokwi",
   "parts": [
     {
@@ -61,22 +61,24 @@
     }
   ],
   "connections": [
-    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
 
-    [ "esp:D25", "rR:1", "red",   [ "h0", "v40" ] ],
-    [ "rR:2",    "ledR:A", "red", [ "v-40" ] ],
-    [ "ledR:C",  "esp:GND.2", "black", [ "v40", "h-80" ] ],
+    [ "esp:D25", "rR:1",    "red", [] ],
+    [ "rR:2",    "ledR:A",  "red", [] ],
 
-    [ "esp:D26", "rV:1", "green",   [ "h0", "v40" ] ],
-    [ "rV:2",    "ledV:A", "green", [ "v-40" ] ],
-    [ "ledV:C",  "esp:GND.2", "black", [ "v40", "h-140" ] ],
+    [ "esp:D26", "rV:1",    "green", [] ],
+    [ "rV:2",    "ledV:A",  "green", [] ],
 
-    [ "esp:D27", "rA:1", "blue",   [ "h0", "v40" ] ],
-    [ "rA:2",    "ledA:A", "blue", [ "v-40" ] ],
-    [ "ledA:C",  "esp:GND.2", "black", [ "v40", "h-200" ] ],
+    [ "esp:D27", "rA:1",    "blue", [] ],
+    [ "rA:2",    "ledA:A",  "blue", [] ],
 
-    [ "esp:D33", "btn:1.l", "gold",  [ "h0", "v20" ] ],
-    [ "btn:2.l", "esp:GND.2", "black", [ "v20", "h-60" ] ]
+    [ "esp:D33", "btn:1.l", "gold", [] ],
+
+    [ "ledR:C",  "ledV:C",    "black", [] ],
+    [ "ledV:C",  "ledA:C",    "black", [] ],
+    [ "ledA:C",  "esp:GND.2", "black", [] ],
+
+    [ "btn:2.l", "esp:GND.2", "black", [] ]
   ]
 }
