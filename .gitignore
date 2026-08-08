@@ -1,0 +1,8 @@
+.pio/
+.vscode/
+sdkconfig.esp32dev
+sdkconfig.defaults.old
+build/
+*.bin
+*.elf
+*.map
