@@ -112,10 +112,17 @@ Tarea6_Ahorro_Energia/
 ├── wokwi.toml            Enlace al firmware compilado
 ├── README.md             Este archivo
 ├── .gitignore
+├── COMO_LEVANTAR.md      Guía de GitHub, VS Code y Wokwi
 ├── docs/
 │   └── informe_base.md   Borrador del PDF entregable
-└── src/
+├── wokwi_web/            Variante lista para simular en el navegador
+│   ├── LEEME.md
+│   ├── CMakeLists.txt
+│   ├── diagram.json
+│   └── main/             (copias de src/)
+└── src/                  <- FUENTE DE VERDAD
     ├── CMakeLists.txt
+    ├── config.h          Parámetros; sirve en PlatformIO y en el navegador
     ├── main.c            Ciclo de operación y máquina de estados
     ├── energia.c/.h      Los tres modos de sueño y sus despertadores
     └── indicador.c/.h    LED RGB de estado
@@ -174,11 +181,23 @@ pio run --target upload
 pio device monitor
 ```
 
-### Simular en Wokwi
+### Simular en Wokwi — dos rutas
+
+**a) Desde VS Code** (la del proyecto principal):
 
 1. `pio run` — genera `firmware.bin` y `firmware.elf`
 2. `Ctrl+Shift+P` → **Wokwi: Start Simulator**
 3. El botón amarillo del diagrama despierta el chip por ext0.
+
+**b) Desde el navegador** (más rápida para una primera verificación):
+
+Ver `wokwi_web/LEEME.md`. No requiere descargar el toolchain, así que sirve
+para validar la lógica mientras PlatformIO termina de instalarse. No permite
+grabar la placa, por lo que la evidencia en hardware sigue necesitando la
+ruta (a).
+
+Gracias a `src/config.h`, el mismo código compila en ambos entornos sin
+modificaciones.
 
 ---
 

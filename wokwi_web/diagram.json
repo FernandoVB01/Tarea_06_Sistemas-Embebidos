@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "author": "Tarea #6 - Sistemas Embebidos - ESPOL",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledR",
+      "top": -80,
+      "left": 240,
+      "attrs": { "color": "red", "label": "DEEP SLEEP" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledV",
+      "top": -80,
+      "left": 300,
+      "attrs": { "color": "green", "label": "ACTIVO" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledA",
+      "top": -80,
+      "left": 360,
+      "attrs": { "color": "blue", "label": "LIGHT SLEEP" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rR",
+      "top": 10,
+      "left": 240,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rV",
+      "top": 10,
+      "left": 300,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rA",
+      "top": 10,
+      "left": 360,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn",
+      "top": 150,
+      "left": 240,
+      "attrs": { "color": "yellow", "label": "WAKE" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+
+    [ "esp:D25", "rR:1", "red",   [ "h0", "v40" ] ],
+    [ "rR:2",    "ledR:A", "red", [ "v-40" ] ],
+    [ "ledR:C",  "esp:GND.2", "black", [ "v40", "h-80" ] ],
+
+    [ "esp:D26", "rV:1", "green",   [ "h0", "v40" ] ],
+    [ "rV:2",    "ledV:A", "green", [ "v-40" ] ],
+    [ "ledV:C",  "esp:GND.2", "black", [ "v40", "h-140" ] ],
+
+    [ "esp:D27", "rA:1", "blue",   [ "h0", "v40" ] ],
+    [ "rA:2",    "ledA:A", "blue", [ "v-40" ] ],
+    [ "ledA:C",  "esp:GND.2", "black", [ "v40", "h-200" ] ],
+
+    [ "esp:D33", "btn:1.l", "gold",  [ "h0", "v20" ] ],
+    [ "btn:2.l", "esp:GND.2", "black", [ "v20", "h-60" ] ]
+  ]
+}
