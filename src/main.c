@@ -71,6 +71,19 @@ static void inicializarPines(void)
     };
     ESP_ERROR_CHECK(gpio_config(&leds));
 
+    /* Fuerza de salida al minimo (~5 mA en vez de los ~20 mA por defecto).
+     *
+     * Es una RED DE SEGURIDAD, no un sustituto de la resistencia: si un LED
+     * se conecta sin sus 220 ohm en serie, a fuerza normal el pin intentaria
+     * entregar 50-100 mA, muy por encima de los 12 mA recomendados por pin,
+     * y acabaria degradando el driver. Con CAP_0 la corriente se queda en un
+     * rango que el pin aguanta.
+     *
+     * Con resistencia puesta esto solo hace el LED ligeramente menos brillante.
+     * La resistencia sigue siendo lo correcto.                              */
+    ESP_ERROR_CHECK(gpio_set_drive_capability(LED_PROCESO, GPIO_DRIVE_CAP_0));
+    ESP_ERROR_CHECK(gpio_set_drive_capability(LED_ESPERA,  GPIO_DRIVE_CAP_0));
+
     /* El boton cierra contra GND, por eso el pull-up interno: en reposo
      * el pin lee 1, y al pulsarlo lee 0.                              */
     const gpio_config_t boton = {

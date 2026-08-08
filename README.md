@@ -177,11 +177,18 @@ Desarrolladas en `docs/informe.pdf`. En resumen:
 
 ---
 
-## 7. Entregables
+## 7. Enlaces de la entrega
+
+- **Simulación en Wokwi:** https://wokwi.com/projects/471758513152881665
+- **Video de funcionamiento:** https://youtube.com/playlist?list=PLKeUXsXQwJig
+- **Informe:** [`docs/informe.pdf`](docs/informe.pdf)
+
+## 8. Entregables
 
 - [x] Código fuente organizado
 - [x] README explicativo
 - [x] Informe PDF con análisis, conclusiones y recomendaciones
-- [ ] Capturas de la simulación en Wokwi
-- [ ] Fotos de la medición con multímetro
-- [ ] Video de demostración en YouTube
+- [x] Capturas de la simulación en Wokwi
+- [x] Implementación física sobre protoboard
+- [x] Video de demostración
+- [ ] Medición de corriente con multímetro
